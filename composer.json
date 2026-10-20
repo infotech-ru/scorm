@@ -1,0 +1,52 @@
+{
+    "name": "scorm-lms/mvp",
+    "description": "SCORM LMS MVP with Yii2",
+    "type": "project",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://asset-packagist.org"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "yiisoft/yii2": "~2.0.49"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11"
+    },
+    "autoload": {
+        "psr-4": {
+            "common\\": "common/",
+            "mainapp\\": "main-app/",
+            "scormplayer\\": "scorm-player/",
+            "console\\": "console/"
+        }
+    },
+    "config": {
+        "process-timeout": 1800,
+        "allow-plugins": {
+            "yiisoft/yii2-composer": true,
+            "npm-asset/foxy": false
+        },
+        "fxp-asset": {
+            "installer-paths": {
+                "npm-asset-library": "vendor/npm",
+                "bower-asset-library": "vendor/bower"
+            }
+        }
+    },
+    "scripts": {
+        "post-install-cmd": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "test": "phpunit"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "tests\\": "tests/"
+        }
+    }
+}

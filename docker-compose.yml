@@ -1,0 +1,59 @@
+x-php-env: &php-env
+  MAIN_APP_URL: http://${MAIN_APP_HOST:-app.local}:${MAIN_APP_PORT:-8090}
+  SCORM_PLAYER_URL: http://${SCORM_PLAYER_HOST:-scorm.local}:${SCORM_PLAYER_PORT:-8091}
+  SCORM_CONTENT_URL: http://${SCORM_CONTENT_HOST:-scorm.local}:${SCORM_CONTENT_PORT:-8092}
+  DB_HOST: 127.0.0.1
+  DB_PORT: "3306"
+  DB_NAME: ${DB_NAME:-scorm_lms}
+  DB_USER: root
+  DB_PASSWORD: ${DB_PASSWORD:-12345}
+  YII_DEBUG: ${YII_DEBUG:-0}
+  COOKIE_VALIDATION_KEY: ${COOKIE_VALIDATION_KEY:-}
+  CONTENT_SIGNING_KEY: ${CONTENT_SIGNING_KEY:-}
+
+x-php-service: &php-service
+  build: docker/php
+  network_mode: "service:db"
+  environment: *php-env
+  volumes:
+    - .:/app
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-12345}
+      MYSQL_DATABASE: ${DB_NAME:-scorm_lms}
+    extra_hosts:
+      - "${MAIN_APP_HOST:-app.local}:127.0.0.1"
+      - "${SCORM_PLAYER_HOST:-scorm.local}:127.0.0.1"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MAIN_APP_PORT:-8090}:${MAIN_APP_PORT:-8090}"
+      - "${SCORM_PLAYER_PORT:-8091}:${SCORM_PLAYER_PORT:-8091}"
+      - "${SCORM_CONTENT_PORT:-8092}:${SCORM_CONTENT_PORT:-8092}"
+      - "${DB_EXTERNAL_PORT:-33070}:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 3s
+      retries: 30
+
+  main-app:
+    <<: *php-service
+    command: php -S 0.0.0.0:${MAIN_APP_PORT:-8090} -t main-app/web main-app/web/router.php
+
+  scorm-player:
+    <<: *php-service
+    command: php -S 0.0.0.0:${SCORM_PLAYER_PORT:-8091} -t scorm-player/web scorm-player/web/router.php
+
+  scorm-content:
+    <<: *php-service
+    command: php -S 0.0.0.0:${SCORM_CONTENT_PORT:-8092} -t scorm-player/content scorm-player/content/router.php
+
+volumes:
+  db-data:
