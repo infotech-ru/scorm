@@ -4,6 +4,7 @@
     var config = JSON.parse(document.getElementById('scorm-config').textContent);
     var frame = document.getElementById('content-frame');
     var queue = Promise.resolve();
+    var initialized = false;
     var terminated = false;
 
     function showError(message) {
@@ -65,6 +66,12 @@
                     definitions: config.definitions,
                     cmi: config.cmi
                 }, config.contentOrigin);
+                break;
+            case 'initialize':
+                if (!initialized && !terminated) {
+                    initialized = true;
+                    enqueue('initialize', {});
+                }
                 break;
             case 'commit':
                 if (!terminated && isPlainValues(data.values)) {

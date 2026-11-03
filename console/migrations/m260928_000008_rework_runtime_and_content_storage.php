@@ -74,7 +74,7 @@ class m260928_000008_rework_runtime_and_content_storage extends Migration
 
             if ($oldPath && is_dir($oldPath) && realpath($oldPath) !== realpath($newPath)) {
                 if (!rename($oldPath, $newPath)) {
-                    throw new RuntimeException("Cannot move {$oldPath} to {$newPath}");
+                    throw new RuntimeException("Не удалось переместить {$oldPath} в {$newPath}");
                 }
             }
 

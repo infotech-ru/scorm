@@ -17,7 +17,7 @@ class ScormManifestParser
     public function parse(string $manifestPath): array
     {
         if (!file_exists($manifestPath)) {
-            throw new RuntimeException("Manifest file not found: {$manifestPath}");
+            throw new RuntimeException("Файл манифеста не найден: {$manifestPath}");
         }
 
         $this->dom = new DOMDocument();
@@ -28,7 +28,7 @@ class ScormManifestParser
         libxml_use_internal_errors($previousErrors);
 
         if (!$loaded) {
-            throw new RuntimeException("Failed to parse manifest XML");
+            throw new RuntimeException("Не удалось разобрать XML манифеста");
         }
 
         $this->xpath = new DOMXPath($this->dom);

@@ -1,13 +1,33 @@
 <?php
 
+use common\components\SelectelStorageS3;
+use yii\caching\FileCache;
+use yii\mutex\MysqlMutex;
+use yii\queue\db\Queue;
+use yii\queue\LogBehavior;
+
 return (static function (): array {
     $env = static fn(string $name, string $default): string => getenv($name) ?: $default;
 
     $config = [
         'vendorPath' => dirname(dirname(__DIR__)) . '/vendor',
+        'timeZone' => 'UTC',
         'components' => [
+            'storage' => [
+                'class' => SelectelStorageS3::class,
+                'accessKey' => $env('S3_ACCESS_KEY', ''),
+                'secretKey' => $env('S3_SECRET_KEY', ''),
+                'container' => $env('S3_CONTAINER', 'dsf-private'),
+                'region' => $env('S3_REGION', 'ru-1'),
+            ],
             'cache' => [
-                'class' => \yii\caching\FileCache::class,
+                'class' => FileCache::class,
+            ],
+            'queue' => [
+                'class' => Queue::class,
+                'as log' => LogBehavior::class,
+                'tableName' => 'scorm_queue',
+                'mutex' => MysqlMutex::class,
             ],
             'db' => [
                 'class' => \yii\db\Connection::class,

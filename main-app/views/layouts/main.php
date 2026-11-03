@@ -24,6 +24,7 @@ $this->beginPage();
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
     <div class="container">
         <a class="navbar-brand" href="/">SCORM LMS</a>
+        <?php if (Yii::$app->params['demoUiEnabled']): ?>
         <ul class="navbar-nav">
             <li class="nav-item">
                 <a class="nav-link" href="/scorm">Packages</a>
@@ -32,6 +33,7 @@ $this->beginPage();
                 <a class="nav-link" href="/scorm/upload">Upload</a>
             </li>
         </ul>
+        <?php endif; ?>
     </div>
 </nav>
 

@@ -14,7 +14,7 @@ use yii\web\UnauthorizedHttpException;
 
 class RuntimeController extends Controller
 {
-    private const MAX_BODY_BYTES = 1048576;
+    private const int MAX_BODY_BYTES = 1048576;
 
     public function behaviors(): array
     {
@@ -25,9 +25,23 @@ class RuntimeController extends Controller
             ],
             'verbs' => [
                 'class' => VerbFilter::class,
-                'actions' => ['commit' => ['POST'], 'terminate' => ['POST']],
+                'actions' => ['initialize' => ['POST'], 'commit' => ['POST'], 'terminate' => ['POST']],
             ],
         ];
+    }
+
+    public function actionInitialize(): array
+    {
+        $token = $this->authenticate();
+
+        if ($token->isReview()) {
+            return ['success' => true, 'errors' => []];
+        }
+
+        new ScormRuntimeService()->initialize($token->attempt);
+        $token->extend(Yii::$app->params['runtimeTokenTtl']);
+
+        return ['success' => true, 'errors' => []];
     }
 
     public function actionCommit(): array
@@ -38,7 +52,7 @@ class RuntimeController extends Controller
             return ['success' => true, 'errors' => []];
         }
 
-        $errors = (new ScormRuntimeService())->commit($token->attempt, $this->values());
+        $errors = new ScormRuntimeService()->commit($token->attempt, $this->values());
         $token->extend(Yii::$app->params['runtimeTokenTtl']);
 
         return ['success' => true, 'errors' => $errors];
@@ -51,7 +65,7 @@ class RuntimeController extends Controller
 
         if (!$token->isReview()) {
             $elapsed = (int)Yii::$app->request->getBodyParam('elapsed', 0);
-            $errors = (new ScormRuntimeService())->terminate($token->attempt, $this->values(), $elapsed);
+            $errors = new ScormRuntimeService()->terminate($token->attempt, $this->values(), $elapsed);
         }
 
         $token->revoke();
@@ -67,7 +81,7 @@ class RuntimeController extends Controller
             : null;
 
         if ($token === null) {
-            throw new UnauthorizedHttpException('Invalid or expired runtime token');
+            throw new UnauthorizedHttpException('Runtime-токен недействителен или устарел');
         }
 
         return $token;
@@ -76,12 +90,12 @@ class RuntimeController extends Controller
     private function values(): array
     {
         if (strlen(Yii::$app->request->getRawBody()) > self::MAX_BODY_BYTES) {
-            throw new BadRequestHttpException('Request body is too large');
+            throw new BadRequestHttpException('Слишком большое тело запроса');
         }
 
         $values = Yii::$app->request->getBodyParam('values', []);
         if (!is_array($values)) {
-            throw new BadRequestHttpException('values must be an object');
+            throw new BadRequestHttpException('values должен быть объектом');
         }
 
         return $values;
