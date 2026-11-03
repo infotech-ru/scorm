@@ -24,7 +24,7 @@ class SendCallbackJob extends BaseObject implements JobInterface
 
     public $clientId;
     public $payload;
-    public $attempt;
+    public $attempt = 0;
     public $firstFailedAt;
 
     public static function sign(string $secret, int $timestamp, string $body): string
