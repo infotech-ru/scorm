@@ -36,6 +36,7 @@ docker compose -p scorm exec -w /app main-app php yii migrate --interactive=0
 127.0.0.1 scorm.local
 ```
 
+Без Docker: PHP 8.1+ с `pdo_mysql`, `zip`, `intl`; MySQL 5.7+ / MariaDB 10.3+; `composer install`, `php yii migrate`, затем `./start-servers.sh` или `start-servers.bat`.
 
 ## Конфигурация
 
@@ -58,7 +59,6 @@ docker compose -p scorm exec -w /app main-app php yii migrate --interactive=0
 | `S3_REGION` | `ru-1` | Регион Selectel S3 |
 
 `common/config/main-local.php` подключается поверх общего конфига для локальных переопределений.
-
 
 ## Runtime
 
