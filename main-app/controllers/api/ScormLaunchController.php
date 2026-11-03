@@ -24,7 +24,7 @@ class ScormLaunchController extends ApiController
             return $this->error(422, ApiErrorCode::InvalidRequest, implode(' ', $form->getFirstErrors()));
         }
 
-        $package = ScormPackage::findForClient(Yii::$app->user->identity, $form->packageId);
+        $package = ScormPackage::findForClient(Yii::$app->user->identity, $form->package_id);
 
         if (!$package || !$package->isReady() || !$package->getDefaultSco()) {
             throw new NotFoundHttpException('Пакет не найден или не готов');

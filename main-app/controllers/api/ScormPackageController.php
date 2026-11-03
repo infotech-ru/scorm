@@ -80,7 +80,7 @@ class ScormPackageController extends ApiController
         }
 
         try {
-            $package = new ScormPackageService()->processRemote($client, $form->sourceUrl, $form->fileName);
+            $package = new ScormPackageService()->processRemote($client, $form->source_url, $form->file_name);
         } catch (ScormPackageException $e) {
             return $this->error(422, $e->getErrorCode(), $e->getMessage());
         }
