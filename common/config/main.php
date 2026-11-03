@@ -1,6 +1,7 @@
 <?php
 
 use common\components\SelectelStorageS3;
+use common\components\SentryTarget;
 use yii\caching\FileCache;
 use yii\mutex\MysqlMutex;
 use yii\queue\db\Queue;
@@ -22,6 +23,18 @@ return (static function (): array {
             ],
             'cache' => [
                 'class' => FileCache::class,
+            ],
+            'log' => [
+                'targets' => [
+                    'sentry' => [
+                        'class' => SentryTarget::class,
+                        'dsn' => $env('SENTRY_DSN', ''),
+                        'enabled' => $env('SENTRY_DSN', '') !== '',
+                        'levels' => ['error', 'warning'],
+                        'logVars' => [],
+                        'except' => ['yii\web\HttpException:4*'],
+                    ],
+                ],
             ],
             'queue' => [
                 'class' => Queue::class,

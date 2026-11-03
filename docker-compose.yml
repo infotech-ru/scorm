@@ -14,6 +14,7 @@ x-php-env: &php-env
   S3_SECRET_KEY: ${S3_SECRET_KEY:-}
   S3_CONTAINER: ${S3_CONTAINER:-dsf-private}
   S3_REGION: ${S3_REGION:-ru-1}
+  SENTRY_DSN: ${SENTRY_DSN:-}
 
 x-php-service: &php-service
   build: docker/php
