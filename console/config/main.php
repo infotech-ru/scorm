@@ -8,7 +8,7 @@ $params = array_merge(
 $config = [
     'id' => 'console',
     'basePath' => dirname(__DIR__),
-    'bootstrap' => ['log'],
+    'bootstrap' => ['log', 'queue'],
     'controllerNamespace' => 'console\controllers',
     'aliases' => [
         '@webroot' => dirname(dirname(__DIR__)) . '/main-app/web',
@@ -25,6 +25,7 @@ $config = [
                 [
                     'class' => \yii\log\FileTarget::class,
                     'levels' => ['error', 'warning'],
+                    'logVars' => [],
                 ],
             ],
         ],

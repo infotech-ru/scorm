@@ -2,12 +2,14 @@
 
 namespace common\services;
 
+use common\enums\ApiErrorCode;
+use common\exceptions\ScormPackageException;
 use RuntimeException;
 use ZipArchive;
 
 class ZipExtractor
 {
-    private const FORBIDDEN_EXTENSIONS = [
+    private const array FORBIDDEN_EXTENSIONS = [
         'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'pht', 'phps',
         'cgi', 'pl', 'py', 'rb', 'sh', 'asp', 'aspx', 'jsp', 'htaccess',
     ];
@@ -23,14 +25,14 @@ class ZipExtractor
         $zip = new ZipArchive();
         $result = $zip->open($zipPath);
         if ($result !== true) {
-            throw new RuntimeException("Cannot open ZIP archive (error {$result})");
+            throw new ScormPackageException(ApiErrorCode::InvalidZip, "Не удалось открыть ZIP-архив (ошибка {$result})");
         }
 
         try {
             $entries = $this->inspect($zip);
 
             if (!is_dir($destinationDir) && !mkdir($destinationDir, 0755, true)) {
-                throw new RuntimeException('Cannot create destination directory');
+                throw new RuntimeException('Не удалось создать каталог для распаковки');
             }
             $base = rtrim(str_replace('\\', '/', realpath($destinationDir)), '/');
 
@@ -41,13 +43,13 @@ class ZipExtractor
 
                 if (str_ends_with($name, '/')) {
                     if (!is_dir($target) && !mkdir($target, 0755, true)) {
-                        throw new RuntimeException('Cannot create directory in package');
+                        throw new RuntimeException('Не удалось создать каталог пакета');
                     }
                     continue;
                 }
 
                 if (!is_dir(dirname($target)) && !mkdir(dirname($target), 0755, true)) {
-                    throw new RuntimeException('Cannot create directory in package');
+                    throw new RuntimeException('Не удалось создать каталог пакета');
                 }
 
                 $written += $this->copyEntry($zip, $index, $target, $this->maxBytes - $written);
@@ -58,6 +60,19 @@ class ZipExtractor
         } finally {
             $zip->close();
         }
+    }
+
+    public function isArchive(string $zipPath): bool
+    {
+        $zip = new ZipArchive();
+
+        if (!$zip->open($zipPath)) {
+            return false;
+        }
+
+        $zip->close();
+
+        return true;
     }
 
     public function hasManifest(string $zipPath): bool
@@ -76,7 +91,7 @@ class ZipExtractor
     private function inspect(ZipArchive $zip): array
     {
         if ($zip->numFiles > $this->maxFiles) {
-            throw new RuntimeException("Package contains more than {$this->maxFiles} files");
+            throw new ScormPackageException(ApiErrorCode::TooLarge, "В пакете больше {$this->maxFiles} файлов");
         }
 
         $entries = [];
@@ -91,12 +106,12 @@ class ZipExtractor
 
             $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
             if (in_array($extension, self::FORBIDDEN_EXTENSIONS, true)) {
-                throw new RuntimeException('Package contains a forbidden file type: .' . $extension);
+                throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Пакет содержит запрещённый тип файла: .' . $extension);
             }
 
             $declaredSize += $stat['size'];
             if ($declaredSize > $this->maxBytes) {
-                throw new RuntimeException('Package is too large when extracted');
+                throw new ScormPackageException(ApiErrorCode::TooLarge, 'Пакет слишком большой после распаковки');
             }
 
             $entries[$i] = $name;
@@ -108,7 +123,7 @@ class ZipExtractor
     private function resolveTarget(string $base, string $name): string
     {
         if (str_contains($name, "\0") || str_starts_with($name, '/') || preg_match('/^[a-zA-Z]:/', $name)) {
-            throw new RuntimeException('Invalid path in archive');
+            throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Недопустимый путь в архиве');
         }
 
         $parts = [];
@@ -117,13 +132,13 @@ class ZipExtractor
                 continue;
             }
             if ($part === '..') {
-                throw new RuntimeException('Invalid path in archive');
+                throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Недопустимый путь в архиве');
             }
             $parts[] = $part;
         }
 
         if (!$parts) {
-            throw new RuntimeException('Invalid path in archive');
+            throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Недопустимый путь в архиве');
         }
 
         return $base . '/' . implode('/', $parts) . (str_ends_with($name, '/') ? '/' : '');
@@ -133,13 +148,13 @@ class ZipExtractor
     {
         $source = $zip->getStream($zip->getNameIndex($index));
         if ($source === false) {
-            throw new RuntimeException('Cannot read file from archive');
+            throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Не удалось прочитать файл из архива');
         }
 
         $destination = fopen($target, 'wb');
         if ($destination === false) {
             fclose($source);
-            throw new RuntimeException('Cannot write extracted file');
+            throw new RuntimeException('Не удалось записать распакованный файл');
         }
 
         $bytes = 0;
@@ -147,11 +162,11 @@ class ZipExtractor
             while (!feof($source)) {
                 $chunk = fread($source, 65536);
                 if ($chunk === false) {
-                    throw new RuntimeException('Cannot read file from archive');
+                    throw new ScormPackageException(ApiErrorCode::InvalidZip, 'Не удалось прочитать файл из архива');
                 }
                 $bytes += strlen($chunk);
                 if ($bytes > $budget) {
-                    throw new RuntimeException('Package is too large when extracted');
+                    throw new ScormPackageException(ApiErrorCode::TooLarge, 'Пакет слишком большой после распаковки');
                 }
                 fwrite($destination, $chunk);
             }

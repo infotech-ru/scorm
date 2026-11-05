@@ -1,4 +1,4 @@
-FROM php:8.2-cli
+FROM php:8.4-cli
 RUN apt-get update && apt-get install -y --no-install-recommends libzip-dev libicu-dev \
     && docker-php-ext-install pdo_mysql zip intl \
     && rm -rf /var/lib/apt/lists/*

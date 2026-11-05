@@ -25,11 +25,14 @@ $config = [
                 $params = Yii::$app->params;
                 $headers = $event->sender->headers;
 
+                $requested = $headers->get('Content-Security-Policy');
+                $frameAncestors = preg_match('/^frame-ancestors [^;,]+$/', (string)$requested) ? $requested : "frame-ancestors 'none'";
+
                 $headers->set('Content-Security-Policy',
                     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                     . "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
                     . "frame-src {$params['scormContentUrl']}; "
-                    . "frame-ancestors {$params['mainAppUrl']}; base-uri 'none'; form-action 'none'"
+                    . "$frameAncestors; base-uri 'none'; form-action 'none'"
                 );
                 $headers->set('X-Content-Type-Options', 'nosniff');
                 $headers->set('Referrer-Policy', 'no-referrer');
@@ -45,6 +48,7 @@ $config = [
             'rules' => [
                 '' => 'site/index',
                 'GET player/launch' => 'player/launch',
+                'POST api/v1/runtime/initialize' => 'api/runtime/initialize',
                 'POST api/v1/runtime/commit' => 'api/runtime/commit',
                 'POST api/v1/runtime/terminate' => 'api/runtime/terminate',
             ],

@@ -10,6 +10,11 @@ x-php-env: &php-env
   YII_DEBUG: ${YII_DEBUG:-0}
   COOKIE_VALIDATION_KEY: ${COOKIE_VALIDATION_KEY:-}
   CONTENT_SIGNING_KEY: ${CONTENT_SIGNING_KEY:-}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+  S3_CONTAINER: ${S3_CONTAINER:-dsf-private}
+  S3_REGION: ${S3_REGION:-ru-1}
+  SENTRY_DSN: ${SENTRY_DSN:-}
 
 x-php-service: &php-service
   build: docker/php
@@ -54,6 +59,9 @@ services:
   scorm-content:
     <<: *php-service
     command: php -S 0.0.0.0:${SCORM_CONTENT_PORT:-8092} -t scorm-player/content scorm-player/content/router.php
+    environment:
+      <<: *php-env
+      PHP_CLI_SERVER_WORKERS: "8"
 
 volumes:
   db-data:

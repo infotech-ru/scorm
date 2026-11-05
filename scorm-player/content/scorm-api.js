@@ -104,6 +104,7 @@
         this.state = 'running';
         this.startedAt = Date.now();
         this.timer = setInterval(this.flush.bind(this), AUTO_COMMIT_MS);
+        this.send({ type: 'initialize' });
         return this.ok('true');
     };
 

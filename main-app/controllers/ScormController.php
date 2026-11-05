@@ -7,6 +7,8 @@ use common\models\ScormPackage;
 use common\models\ScormSco;
 use common\services\ScormLaunchService;
 use common\services\ScormPackageService;
+use LogicException;
+use RuntimeException;
 use Yii;
 use yii\filters\VerbFilter;
 use yii\web\Controller;
@@ -26,10 +28,19 @@ class ScormController extends Controller
         ];
     }
 
+    public function beforeAction($action): bool
+    {
+        if (!Yii::$app->params['demoUiEnabled']) {
+            throw new NotFoundHttpException();
+        }
+
+        return parent::beforeAction($action);
+    }
+
     public function actionIndex(): string
     {
         return $this->render('index', [
-            'packages' => ScormPackage::find()->orderBy(['created_at' => SORT_DESC])->all(),
+            'packages' => ScormPackage::find()->where(['client_id' => null])->orderBy(['created_at' => SORT_DESC])->all(),
         ]);
     }
 
@@ -39,14 +50,17 @@ class ScormController extends Controller
             $file = UploadedFile::getInstanceByName('scorm_file');
 
             if ($file === null) {
-                Yii::$app->session->setFlash('error', 'Please select a file to upload.');
+                Yii::$app->session->setFlash('error', 'Выберите файл для загрузки.');
             } else {
                 try {
-                    $package = (new ScormPackageService())->processUpload($file, $this->learnerId());
+                    $package = new ScormPackageService()->processUpload($file, $this->learnerId());
                     Yii::$app->session->setFlash('success', 'SCORM package uploaded.');
                     return $this->redirect(['view', 'id' => $package->id]);
-                } catch (\RuntimeException $e) {
-                    Yii::$app->session->setFlash('error', 'Upload failed: ' . $e->getMessage());
+                } catch (RuntimeException $e) {
+                    Yii::$app->session->setFlash('error', 'Не удалось загрузить пакет: ' . $e->getMessage());
+                } catch (LogicException $e) {
+                    Yii::error($e, __METHOD__);
+                    Yii::$app->session->setFlash('error', 'Не удалось загрузить пакет: ошибка хранилища.');
                 }
             }
         }
@@ -75,20 +89,20 @@ class ScormController extends Controller
     {
         $package = $this->findPackage($id);
         if (!$package->isReady()) {
-            throw new NotFoundHttpException('Package is not ready for playback.');
+            throw new NotFoundHttpException('Пакет не готов к запуску.');
         }
 
         $tocRows = $package->getTocRows($package->getOrderedScos());
         $scos = array_values(array_filter(array_column($tocRows, 'sco')));
         if (!$scos) {
-            throw new NotFoundHttpException('No SCO found in this package.');
+            throw new NotFoundHttpException('В пакете нет SCO.');
         }
 
         $index = 0;
         if ($sco !== null) {
             $index = array_search($sco, array_map(fn(ScormSco $s) => $s->id, $scos), true);
             if ($index === false) {
-                throw new NotFoundHttpException('SCO not found in this package.');
+                throw new NotFoundHttpException('SCO не найден в пакете.');
             }
         }
         $currentSco = $scos[$index];
@@ -113,9 +127,12 @@ class ScormController extends Controller
     {
         try {
             (new ScormPackageService())->deletePackage($this->findPackage($id));
-            Yii::$app->session->setFlash('success', 'Package deleted.');
-        } catch (\RuntimeException $e) {
-            Yii::$app->session->setFlash('error', 'Failed to delete package: ' . $e->getMessage());
+            Yii::$app->session->setFlash('success', 'Пакет удалён.');
+        } catch (RuntimeException $e) {
+            Yii::$app->session->setFlash('error', 'Не удалось удалить пакет: ' . $e->getMessage());
+        } catch (LogicException $e) {
+            Yii::error($e, __METHOD__);
+            Yii::$app->session->setFlash('error', 'Не удалось удалить пакет: ошибка хранилища.');
         }
 
         return $this->redirect(['index']);
@@ -123,7 +140,7 @@ class ScormController extends Controller
 
     private function findPackage(int $id): ScormPackage
     {
-        return ScormPackage::findOne($id) ?? throw new NotFoundHttpException('Package not found.');
+        return ScormPackage::findOne(['id' => $id, 'client_id' => null]) ?? throw new NotFoundHttpException('Пакет не найден.');
     }
 
     private function learnerId(): int

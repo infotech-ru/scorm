@@ -1,89 +1,96 @@
 <?php
 
+use common\components\SelectelStorageS3;
+use common\services\ContentFileResponder;
 use common\services\ContentUrlSigner;
 
 require __DIR__ . '/../../vendor/autoload.php';
+require __DIR__ . '/../../vendor/yiisoft/yii2/Yii.php';
 
 const HOST_PAGE = '.scorm-host.html';
-
-const MIME_TYPES = [
-    'html' => 'text/html; charset=utf-8',
-    'htm' => 'text/html; charset=utf-8',
-    'js' => 'text/javascript; charset=utf-8',
-    'mjs' => 'text/javascript; charset=utf-8',
-    'css' => 'text/css; charset=utf-8',
-    'json' => 'application/json',
-    'xml' => 'application/xml',
-    'xsd' => 'application/xml',
-    'txt' => 'text/plain; charset=utf-8',
-    'vtt' => 'text/vtt',
-    'srt' => 'text/plain; charset=utf-8',
-    'jpg' => 'image/jpeg',
-    'jpeg' => 'image/jpeg',
-    'png' => 'image/png',
-    'gif' => 'image/gif',
-    'webp' => 'image/webp',
-    'svg' => 'image/svg+xml',
-    'ico' => 'image/x-icon',
-    'bmp' => 'image/bmp',
-    'mp3' => 'audio/mpeg',
-    'wav' => 'audio/wav',
-    'ogg' => 'audio/ogg',
-    'm4a' => 'audio/mp4',
-    'mp4' => 'video/mp4',
-    'webm' => 'video/webm',
-    'ogv' => 'video/ogg',
-    'woff' => 'font/woff',
-    'woff2' => 'font/woff2',
-    'ttf' => 'font/ttf',
-    'otf' => 'font/otf',
-    'eot' => 'application/vnd.ms-fontobject',
-    'pdf' => 'application/pdf',
-    'swf' => 'application/x-shockwave-flash',
-];
 
 $params = require __DIR__ . '/../../common/config/params.php';
 $debug = filter_var(getenv('YII_DEBUG'), FILTER_VALIDATE_BOOL);
 
-sendSecurityHeaders($params['scormPlayerUrl'], $params['mainAppUrl']);
+sendSecurityHeaders("'none'");
 
 $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '');
 
 if ($path === '/scorm-api.js') {
-    sendFile(__DIR__ . '/scorm-api.js', MIME_TYPES['js']);
+    sendFile(__DIR__ . '/scorm-api.js', ContentFileResponder::MIME_TYPES['js']);
     return true;
 }
 
-if (!preg_match('#^/c/(\d+)/(\d+)/([a-f0-9]{32})/(.+)$#', $path, $matches)) {
+if (!preg_match('#^/c/(\d+)/([A-Za-z0-9_-]+)/(\d+)/([A-Za-z0-9_-]+)/([a-f0-9]{32})/(.+)\z#', $path, $matches)) {
     notFound();
     return true;
 }
 
-[, $packageId, $expiresAt, $signature, $relativePath] = $matches;
+[, $packageId, $encodedPrefix, $expiresAt, $encodedOrigin, $signature, $relativePath] = $matches;
+$ancestorOrigin = ContentUrlSigner::decodeOrigin($encodedOrigin);
+$packagePrefix = ContentUrlSigner::decodePrefix($encodedPrefix);
 
-if (!ContentUrlSigner::fromParams($params, $debug)->verify((int)$packageId, (int)$expiresAt, $signature)) {
+if (!$ancestorOrigin
+    || !$packagePrefix
+    || !ContentUrlSigner::fromParams($params, $debug)->verify($packageId, $packagePrefix, $expiresAt, $ancestorOrigin, $signature)
+) {
     http_response_code(403);
     return true;
 }
 
 if ($relativePath === HOST_PAGE) {
+    sendSecurityHeaders($params['scormPlayerUrl'] . ' ' . $ancestorOrigin);
     renderHostPage(is_string($_GET['launch'] ?? null) ? $_GET['launch'] : '', $params['scormPlayerUrl']);
     return true;
 }
 
-$base = realpath($params['scormContentPath'] . '/' . $packageId);
-$file = $base ? realpath($base . '/' . $relativePath) : false;
-$extension = strtolower(pathinfo((string)$file, PATHINFO_EXTENSION));
+sendSecurityHeaders("'self' " . $params['scormPlayerUrl'] . ' ' . $ancestorOrigin);
 
-if (!$file || !str_starts_with($file, $base . DIRECTORY_SEPARATOR) || !is_file($file) || !isset(MIME_TYPES[$extension])) {
+try {
+    /** @var SelectelStorageS3 $storage */
+    $storage = Yii::createObject((require __DIR__ . '/../../common/config/main.php')['components']['storage']);
+    $response = new ContentFileResponder($storage)->respond(
+        $packagePrefix,
+        $relativePath,
+        is_string($_SERVER['HTTP_RANGE'] ?? null) ? $_SERVER['HTTP_RANGE'] : null
+    );
+} catch (Throwable $e) {
+    error_log('Ошибка формирования ответа: ' . $packageId . ': ' . get_class($e));
+    http_response_code(502);
+    header('Accept-Ranges: bytes');
+    return true;
+}
+
+foreach ($response['headers'] as $name => $value) {
+    header($name . ': ' . $value);
+}
+
+if ($response['status'] === 404) {
     notFound();
     return true;
 }
 
-sendFile($file, MIME_TYPES[$extension]);
+http_response_code($response['status']);
+
+if ($response['body'] === null) {
+    if ($response['status'] === 502) {
+        error_log('Ошибка формирования ответа: ' . $packageId . ': ' . $response['error']);
+    }
+    return true;
+}
+
+try {
+    while (!$response['body']->eof()) {
+        echo $response['body']->read(8192);
+        flush();
+    }
+} catch (Throwable $e) {
+    error_log('Ошибка формирования ответа: ' . $packageId . ': ' . get_class($e));
+}
+
 return true;
 
-function sendSecurityHeaders(string $playerOrigin, string $mainAppOrigin): void
+function sendSecurityHeaders(string $frameAncestors): void
 {
     header(
         "Content-Security-Policy: default-src 'self' data: blob:; "
@@ -92,7 +99,7 @@ function sendSecurityHeaders(string $playerOrigin, string $mainAppOrigin): void
         . "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; "
         . "connect-src 'self'; frame-src 'self'; object-src 'self'; "
         . "form-action 'self'; base-uri 'self'; "
-        . "frame-ancestors 'self' {$playerOrigin} {$mainAppOrigin}"
+        . "frame-ancestors $frameAncestors"
     );
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: no-referrer');

@@ -2,10 +2,19 @@
 
 namespace tests\Http;
 
+use common\helpers\Helper;
+use common\models\ScormAttempt;
+use common\models\ScormClient;
+use common\models\ScormPackage;
+use common\models\ScormSco;
 use PHPUnit\Framework\TestCase;
+use Yii;
+use yii\console\Application;
 
 final class SecurityHeadersTest extends TestCase
 {
+    private const string CLIENT_ORIGIN = 'https://dnm-http-test.example.com';
+
     private string $mainAppUrl;
     private string $playerUrl;
     private string $contentUrl;
@@ -31,22 +40,25 @@ final class SecurityHeadersTest extends TestCase
         $this->assertStringContainsString("frame-ancestors 'none'", $headers['content-security-policy'] ?? '');
     }
 
-    public function testPlayerCanOnlyBeFramedByMainAppAndFramesOnlyContent(): void
+    public function testPlayerPagesCannotBeFramedByDefault(): void
     {
         $csp = $this->request('GET', $this->playerUrl . '/')['headers']['content-security-policy'] ?? '';
 
-        $this->assertStringContainsString("frame-ancestors {$this->mainAppUrl}", $csp);
-        $this->assertStringContainsString("frame-src {$this->contentUrl}", $csp);
+        $this->assertStringContainsString("frame-ancestors 'none';", $csp);
+        $this->assertStringContainsString("frame-src {$this->contentUrl};", $csp);
         $this->assertStringContainsString("script-src 'self';", $csp);
+        $this->assertStringNotContainsString($this->mainAppUrl, $csp);
     }
 
     public function testContentServerSendsHeadersEvenForErrors(): void
     {
-        $response = $this->request('GET', $this->contentUrl . '/c/1/1/00000000000000000000000000000000/index.html');
+        $origin = rtrim(strtr(base64_encode(self::CLIENT_ORIGIN), '+/', '-_'), '=');
+        $response = $this->request('GET', $this->contentUrl . '/c/1/' . $this->encodedPrefix() . '/1/' . $origin . '/00000000000000000000000000000000/index.html');
 
         $this->assertSame(403, $response['status']);
         $this->assertSame('nosniff', $response['headers']['x-content-type-options'] ?? null);
-        $this->assertStringContainsString("frame-ancestors 'self' {$this->playerUrl} {$this->mainAppUrl}", $response['headers']['content-security-policy'] ?? '');
+        $this->assertSame(["frame-ancestors 'none'"], $this->directives($response['headers']['content-security-policy'] ?? '', 'frame-ancestors'));
+        $this->assertSame(404, $this->request('GET', $this->contentUrl . '/c/1/' . $this->encodedPrefix() . '/1/00000000000000000000000000000000/index.html')['status']);
     }
 
     public function testContentServerRejectsUnsignedPaths(): void
@@ -105,6 +117,19 @@ final class SecurityHeadersTest extends TestCase
             }
         }
 
-        return ['status' => $status, 'headers' => $parsed];
+        return ['status' => $status, 'headers' => $parsed, 'body' => substr($raw, $headerSize)];
+    }
+
+    private function encodedPrefix(): string
+    {
+        return rtrim(strtr(base64_encode(Helper::generatePrefix()), '+/', '-_'), '=');
+    }
+
+    private function directives(string $csp, string $name): array
+    {
+        return array_values(array_filter(
+            array_map('trim', explode(';', $csp)),
+            static fn(string $directive): bool => str_starts_with($directive, $name . ' ')
+        ));
     }
 }

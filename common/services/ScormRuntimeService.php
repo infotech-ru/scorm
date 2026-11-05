@@ -2,6 +2,7 @@
 
 namespace common\services;
 
+use common\jobs\SendCallbackJob;
 use common\models\ScormAttempt;
 use common\models\ScormPackage;
 use common\models\ScormTrackingData;
@@ -14,7 +15,7 @@ final class ScormRuntimeService
     private const MAX_SESSION_SECONDS = 86400;
     private const COLUMN_NUMBER_LIMIT = 99999999;
 
-    private const COLUMNS = [
+    private const array COLUMNS = [
         '1.2' => [
             'cmi.core.lesson_status' => 'lesson_status',
             'cmi.core.lesson_location' => 'lesson_location',
@@ -38,6 +39,10 @@ final class ScormRuntimeService
         ],
     ];
 
+    public function __construct(private readonly CallbackNotifier $notifier = new CallbackNotifier())
+    {
+    }
+
     public function initialData(ScormAttempt $attempt, bool $review): array
     {
         $package = $attempt->package;
@@ -56,8 +61,8 @@ final class ScormRuntimeService
         $entry = $review ? '' : $attempt->entry;
         $credit = $review ? 'no-credit' : 'credit';
         $mode = $review ? 'review' : 'normal';
-        $learnerId = (string)$attempt->user_id;
-        $learnerName = 'Learner ' . $attempt->user_id;
+        $learnerId = $attempt->is_preview ? 'preview' : (string)($attempt->learner_id ?? $attempt->user_id);
+        $learnerName = $attempt->is_preview ? 'Preview' : (string)($attempt->learner_name ?? 'Learner ' . $attempt->user_id);
 
         if ($version === ScormPackage::VERSION_12) {
             return array_merge($data, [
@@ -113,6 +118,17 @@ final class ScormRuntimeService
         return $data;
     }
 
+    public function initialize(ScormAttempt $attempt): void
+    {
+        Yii::$app->db->transaction(function () use ($attempt): void {
+            $now = date('Y-m-d H:i:s');
+            $attempt->started_at ??= $now;
+            $attempt->last_accessed_at = $now;
+            $this->save($attempt);
+            $this->notifier->notify($attempt, SendCallbackJob::EVENT_INITIALIZE);
+        });
+    }
+
     public function commit(ScormAttempt $attempt, array $values): array
     {
         $version = $attempt->package->version;
@@ -122,6 +138,7 @@ final class ScormRuntimeService
         try {
             $this->apply($attempt, $version, $valid);
             $this->save($attempt);
+            $this->notifier->notify($attempt, SendCallbackJob::EVENT_COMMIT);
             $transaction->commit();
         } catch (\Throwable $e) {
             $transaction->rollBack();
@@ -141,6 +158,7 @@ final class ScormRuntimeService
             $this->apply($attempt, $version, $valid);
             $this->finalize($attempt, $version, $valid, $elapsedSeconds);
             $this->save($attempt);
+            $this->notifier->notify($attempt, SendCallbackJob::EVENT_TERMINATE);
             $transaction->commit();
         } catch (\Throwable $e) {
             $transaction->rollBack();
@@ -153,7 +171,7 @@ final class ScormRuntimeService
     private function validate(string $version, array $values): array
     {
         if (count($values) > self::MAX_VALUES_PER_REQUEST) {
-            throw new RuntimeException('Too many values in one request');
+            throw new RuntimeException('Слишком много значений в одном запросе');
         }
 
         $valid = [];
@@ -224,7 +242,8 @@ final class ScormRuntimeService
         if ($attempt->completed_at === null && $attempt->hasTerminalStatus()) {
             $attempt->completed_at = $now;
         }
-        if ($exit !== ScormAttempt::EXIT_SUSPEND && $attempt->hasTerminalStatus()) {
+        $closing = $attempt->hasTerminalStatus() || $attempt->lesson_status === ScormAttempt::STATUS_BROWSED;
+        if ($exit !== ScormAttempt::EXIT_SUSPEND && $closing) {
             $attempt->finished_at = $now;
         }
     }
@@ -257,7 +276,7 @@ final class ScormRuntimeService
     private function save(ScormAttempt $attempt): void
     {
         if (!$attempt->save()) {
-            throw new RuntimeException('Failed to save attempt: ' . json_encode($attempt->getFirstErrors()));
+            throw new RuntimeException('Не удалось сохранить попытку: ' . json_encode($attempt->getFirstErrors()));
         }
     }
 }

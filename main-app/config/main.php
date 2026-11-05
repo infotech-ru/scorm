@@ -1,5 +1,8 @@
 <?php
 
+use common\models\ScormClient;
+use yii\web\User;
+
 $params = array_merge(
     require __DIR__ . '/../../common/config/params.php',
     require __DIR__ . '/params.php'
@@ -7,12 +10,13 @@ $params = array_merge(
 
 $cookieValidationKey = getenv('COOKIE_VALIDATION_KEY') ?: (YII_DEBUG ? 'dev-only-cookie-validation-key' : null);
 if ($cookieValidationKey === null) {
-    throw new \yii\base\InvalidConfigException('COOKIE_VALIDATION_KEY must be set');
+    throw new \yii\base\InvalidConfigException('Не задан COOKIE_VALIDATION_KEY');
 }
 
 $config = [
     'id' => 'main-app',
     'name' => 'SCORM LMS',
+    'language' => 'ru-RU',
     'basePath' => dirname(__DIR__),
     'bootstrap' => ['log'],
     'controllerNamespace' => 'mainapp\controllers',
@@ -37,6 +41,12 @@ $config = [
                 $headers->set('Referrer-Policy', 'same-origin');
             },
         ],
+        'user' => [
+            'class' => User::class,
+            'identityClass' => ScormClient::class,
+            'enableSession' => false,
+            'enableAutoLogin' => false,
+        ],
         'errorHandler' => [
             'errorAction' => 'site/error',
         ],
@@ -44,7 +54,7 @@ $config = [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
-                'POST api/v1/scorm-packages/upload' => 'api/scorm-package/upload',
+                'POST api/v1/scorm-packages' => 'api/scorm-package/create',
                 'GET api/v1/scorm-packages' => 'api/scorm-package/index',
                 'GET api/v1/scorm-packages/<id:\d+>' => 'api/scorm-package/view',
                 'DELETE api/v1/scorm-packages/<id:\d+>' => 'api/scorm-package/delete',
@@ -64,6 +74,7 @@ $config = [
                 [
                     'class' => \yii\log\FileTarget::class,
                     'levels' => ['error', 'warning'],
+                    'logVars' => [],
                     'except' => ['yii\web\HttpException:404'],
                 ],
             ],

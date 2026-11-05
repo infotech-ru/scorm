@@ -6,13 +6,32 @@ use Yii;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 
+/**
+ * @property int $id
+ * @property string $token
+ * @property int|null $user_id
+ * @property int|null $client_id
+ * @property int $attempt_id
+ * @property string $purpose
+ * @property string $mode
+ * @property bool $is_active
+ * @property string|null $ip_address
+ * @property string|null $expires_at
+ * @property string|null $used_at
+ * @property string|null $created_at
+ *
+ * @property ScormAttempt $attempt
+ */
 class ScormLaunchToken extends ActiveRecord
 {
-    public const PURPOSE_LAUNCH = 'launch';
-    public const PURPOSE_RUNTIME = 'runtime';
+    public const string PURPOSE_LAUNCH = 'launch';
+    public const string PURPOSE_RUNTIME = 'runtime';
 
-    public const MODE_NORMAL = 'normal';
-    public const MODE_REVIEW = 'review';
+    public const string MODE_NORMAL = 'normal';
+    public const string MODE_REVIEW = 'review';
+    public const string MODE_PREVIEW = 'preview';
+
+    public const array MODES = [self::MODE_NORMAL, self::MODE_REVIEW, self::MODE_PREVIEW];
 
     public static function tableName(): string
     {
@@ -29,6 +48,7 @@ class ScormLaunchToken extends ActiveRecord
         $token = new self();
         $token->token = bin2hex(random_bytes(32));
         $token->user_id = $attempt->user_id;
+        $token->client_id = $attempt->client_id;
         $token->attempt_id = $attempt->id;
         $token->purpose = $purpose;
         $token->mode = $mode;
@@ -63,6 +83,7 @@ class ScormLaunchToken extends ActiveRecord
 
     public static function findActive(string $token, string $purpose): ?self
     {
+        /** @noinspection PhpIncompatibleReturnTypeInspection */
         return self::find()
             ->where(['token' => $token, 'purpose' => $purpose, 'is_active' => 1])
             ->andWhere(['>', 'expires_at', date('Y-m-d H:i:s')])

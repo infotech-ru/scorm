@@ -4,10 +4,32 @@ namespace common\models;
 
 use yii\db\ActiveRecord;
 
+/**
+ * @property int $id
+ * @property int $package_id
+ * @property int|null $parent_id
+ * @property string $identifier
+ * @property string|null $title
+ * @property string $launch_url
+ * @property string|null $parameters
+ * @property string|null $prerequisites
+ * @property string|null $max_time_allowed
+ * @property string|null $time_limit_action
+ * @property float|null $mastery_score
+ * @property float|null $scaled_passing_score
+ * @property string[]|null $objective_ids
+ * @property string $scorm_type
+ * @property int $sort_order
+ * @property string|null $created_at
+ *
+ * @property ScormPackage $package
+ * @property ScormSco|null $parent
+ * @property ScormSco[] $children
+ */
 class ScormSco extends ActiveRecord
 {
-    public const TYPE_SCO = 'sco';
-    public const TYPE_ASSET = 'asset';
+    public const string TYPE_SCO = 'sco';
+    public const string TYPE_ASSET = 'asset';
 
     public static function tableName(): string
     {

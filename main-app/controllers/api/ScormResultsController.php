@@ -11,8 +11,8 @@ class ScormResultsController extends ApiController
 {
     public function actionAttempt(int $id): array
     {
-        $attempt = ScormAttempt::findOne(['id' => $id, 'user_id' => Yii::$app->params['learnerId']])
-            ?? throw new NotFoundHttpException('Attempt not found');
+        $attempt = ScormAttempt::findOne(['id' => $id, 'client_id' => Yii::$app->user->identity])
+            ?? throw new NotFoundHttpException('Попытка не найдена');
 
         return [
             'success' => true,

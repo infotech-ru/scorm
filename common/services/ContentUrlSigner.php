@@ -2,42 +2,91 @@
 
 namespace common\services;
 
+use common\helpers\Helper;
+use InvalidArgumentException;
 use RuntimeException;
 
 final class ContentUrlSigner
 {
-    private const DEV_KEY = 'dev-only-content-signing-key';
+    private const string DEV_KEY = 'dev-only-content-signing-key';
 
     public function __construct(private readonly string $key)
     {
-        if ($key === '') {
-            throw new RuntimeException('Content signing key is empty');
+        if (!$key) {
+            throw new RuntimeException('Ключ подписи контента пуст');
         }
     }
 
     public static function fromParams(array $params, bool $debug): self
     {
-        $key = (string)($params['contentSigningKey'] ?? '');
-        if ($key === '' && !$debug) {
-            throw new RuntimeException('CONTENT_SIGNING_KEY must be set');
+        $key = $params['contentSigningKey'] ?? '';
+        if (!$key && !$debug) {
+            throw new RuntimeException('Не задан CONTENT_SIGNING_KEY');
         }
 
-        return new self($key !== '' ? $key : self::DEV_KEY);
+        return new self($key ?: self::DEV_KEY);
     }
 
-    public function basePath(int $packageId, int $expiresAt): string
+    public function basePath(int $packageId, string $prefix, int $expiresAt, string $ancestorOrigin): string
     {
-        return sprintf('/c/%d/%d/%s/', $packageId, $expiresAt, $this->signature($packageId, $expiresAt));
+        if (!Helper::isValidOrigin($ancestorOrigin)) {
+            throw new InvalidArgumentException('Недопустимый origin родительской страницы');
+        }
+
+        if (!Helper::isValidPrefix($prefix)) {
+            throw new InvalidArgumentException('Недопустимый префикс пакета');
+        }
+
+        return sprintf(
+            '/c/%d/%s/%d/%s/%s/',
+            $packageId,
+            self::encode($prefix),
+            $expiresAt,
+            self::encode($ancestorOrigin),
+            $this->signature($packageId, $prefix, $expiresAt, $ancestorOrigin)
+        );
     }
 
-    public function verify(int $packageId, int $expiresAt, string $signature, ?int $now = null): bool
+    public function verify(int $packageId, string $prefix, int $expiresAt, string $ancestorOrigin, string $signature, ?int $now = null): bool
     {
         return $expiresAt >= ($now ?? time())
-            && hash_equals($this->signature($packageId, $expiresAt), $signature);
+            && Helper::isValidOrigin($ancestorOrigin)
+            && Helper::isValidPrefix($prefix)
+            && hash_equals($this->signature($packageId, $prefix, $expiresAt, $ancestorOrigin), $signature);
     }
 
-    private function signature(int $packageId, int $expiresAt): string
+    public static function decodeOrigin(string $encoded): ?string
     {
-        return substr(hash_hmac('sha256', $packageId . '|' . $expiresAt, $this->key), 0, 32);
+        $origin = self::decode($encoded);
+
+        return !Helper::isValidOrigin($origin) ? null : $origin;
+    }
+
+    public static function decodePrefix(string $encoded): ?string
+    {
+        $prefix = self::decode($encoded);
+
+        return !Helper::isValidPrefix($prefix) ? null : $prefix;
+    }
+
+    private static function decode(string $encoded): ?string
+    {
+        if (!$encoded || !preg_match('/^[A-Za-z0-9_-]+\z/', $encoded)) {
+            return null;
+        }
+
+        $value = base64_decode(strtr($encoded, '-_', '+/'), true);
+
+        return $value ?: null;
+    }
+
+    private static function encode(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+    }
+
+    private function signature(int $packageId, string $prefix, int $expiresAt, string $ancestorOrigin): string
+    {
+        return substr(hash_hmac('sha256', $packageId . '|' . $prefix . '|' . $expiresAt . '|' . $ancestorOrigin, $this->key), 0, 32);
     }
 }
