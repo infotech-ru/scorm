@@ -5,6 +5,9 @@ use common\services\ContentFileResponder;
 use common\services\ContentUrlSigner;
 
 require __DIR__ . '/../../vendor/autoload.php';
+
+Dotenv\Dotenv::createUnsafeImmutable(dirname(__DIR__, 2))->safeLoad();
+
 require __DIR__ . '/../../vendor/yiisoft/yii2/Yii.php';
 
 const HOST_PAGE = '.scorm-host.html';
