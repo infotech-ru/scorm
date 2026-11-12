@@ -32,6 +32,7 @@ final class CallbackNotifier
             'course_ref' => $attempt->course_ref,
             'version' => $version,
             'event' => $event,
+            'attempt_number' => $attempt->attempt_number,
             'lesson_status' => $this->lessonStatus($attempt),
             'score_raw' => $attempt->score_raw,
             'score_min' => $attempt->score_min,
